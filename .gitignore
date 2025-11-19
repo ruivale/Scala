@@ -1,0 +1,41 @@
+# Ficheiros e pastas gerados pelo sbt
+target/
+project/target/
+project/project/
+
+# Ficheiros de log
+*.log
+
+# Ficheiros temporários do sistema operativo
+.DS_Store
+Thumbs.db
+
+# Ficheiros de IDEs
+#.idea/
+#*.iml
+#*.ipr
+#*.iws
+#*.sw?
+*.bak
+*.tmp
+
+# IntelliJ
+out/
+*.class
+
+# VS Code
+#.vscode/
+
+# Ficheiros de compilação
+*.class
+#*.jar
+*.war
+*.ear
+
+# Ficheiros de cache
+.cache/
+.history/
+.ensime_cache/
+
+# Ficheiros de testes
+test-output/

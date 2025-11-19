@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module external.linked.project.id="root [file:/C:/D/Projects/GIT/_GitHub/Private/ruivale/Scala/Mp3Idv2Tagging/]" external.linked.project.path="$MODULE_DIR$/../.." external.root.project.path="$MODULE_DIR$/../.." external.system.id="SBT" type="JAVA_MODULE" version="4">
+  <component name="DisplayModuleName">
+    <option name="name" value="Mp3Idv2Tagging" />
+  </component>
+  <component name="NewModuleRootManager" LANGUAGE_LEVEL="JDK_22" inherit-compiler-output="true">
+    <exclude-output />
+    <content url="file://$MODULE_DIR$/../..">
+      <excludeFolder url="file://$MODULE_DIR$/../../target" />
+    </content>
+    <orderEntry type="inheritedJdk" />
+    <orderEntry type="sourceFolder" forTests="false" />
+    <orderEntry type="module" module-name="Mp3Idv2Tagging.main" />
+    <orderEntry type="module" module-name="Mp3Idv2Tagging.test" production-on-test="" />
+    <orderEntry type="library" name="mp3agic-0.9.1" level="project" />
+  </component>
+</module>
