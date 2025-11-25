@@ -4,7 +4,12 @@ import com.mpatric.mp3agic.Mp3File
 import com.mpatric.mp3agic.ID3v1
 import com.mpatric.mp3agic.ID3v1Tag
 import com.mpatric.mp3agic.ID3v2
-
+import sttp.client3.*
+//import sttp.model.*
+import scala.util.Try
+import scala.util.control.NonFatal
+import java.nio.file.{Files, Paths}
+import scala.sys.exit
 
 /**
  * mp3agic:
@@ -30,6 +35,94 @@ import com.mpatric.mp3agic.ID3v2
  */
 object Main extends App {
 
+  val backend = HttpURLConnectionBackend()
+
+
+  // ---------------------------------------------------------
+  // 1. Search for a Recording MBID using artist + track title
+  // ---------------------------------------------------------
+  def searchRecordingMBID(artist: String, title: String): Option[String] =
+    val query = s"""recording:"$title" AND artist:"$artist""""
+    val url = uri"https://musicbrainz.org/ws/2/recording/?query=$query&fmt=json"
+
+    val response = basicRequest.get(url).send(backend)
+
+    response.body.toOption.flatMap { json =>
+      // Very light JSON extraction without a library:
+      // Find:  "id": "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX"
+      val idRegex = """"id"\s*:\s*"([0-9a-fA-F-]{36})"""".r
+      idRegex.findFirstMatchIn(json).map(_.group(1))
+    }
+
+
+  // ---------------------------------------------------------
+  // 2. Look up which Releases contain this recording
+  // ---------------------------------------------------------
+  def lookupReleaseMBID(recordingMBID: String): Option[String] =
+    val url = uri"https://musicbrainz.org/ws/2/recording/$recordingMBID?inc=releases&fmt=json"
+
+    val response = basicRequest.get(url).send(backend)
+
+    response.body.toOption.flatMap { json =>
+      // Extract *first* release MBID
+      val idRegex = """"id"\s*:\s*"([0-9a-fA-F-]{36})"""".r
+      idRegex.findFirstMatchIn(json).map(_.group(1))
+    }
+
+
+  // ---------------------------------------------------------
+  // 3. Download the front cover using the Release MBID
+  // ---------------------------------------------------------
+  def downloadCover(releaseMBID: String, filename: String = "cover.jpg"): Boolean =
+    val url = uri"https://coverartarchive.org/release/$releaseMBID/front"
+
+    val response = basicRequest
+      .get(url)
+      .response(asByteArray)
+      .send(backend)
+
+    response.body match
+      case Right(bytes) =>
+        Files.write(Paths.get(filename), bytes)
+        println(s"Saved cover to $filename")
+        true
+      case Left(err) =>
+        println(s"Failed to fetch cover art: $err")
+        false
+
+
+  // ---------------------------------------------------------
+  // 4. High-level helper:
+  //    artist + title -> cover.jpg
+  // ---------------------------------------------------------
+  def fetchCover(artist: String, title: String): Unit =
+    try
+      println(s"Searching MBID for: $artist - $title")
+
+      val recordingMBID = searchRecordingMBID(artist, title)
+      if recordingMBID.isEmpty then
+        println("No recording match found")
+        return
+
+      println(s"Recording MBID = ${recordingMBID.get}")
+
+      val releaseMBID = lookupReleaseMBID(recordingMBID.get)
+      if releaseMBID.isEmpty then
+        println("No release found for this recording")
+        return
+
+      println(s"Release MBID = ${releaseMBID.get}")
+
+      downloadCover(releaseMBID.get)
+
+    catch
+      case NonFatal(e) => println(s"Error: ${e.getMessage}")
+
+
+
+
+
+
   //
   // From the given directory, recursively obtain and return ALL files.
   //
@@ -37,6 +130,7 @@ object Main extends App {
     println("\trecursiveListFiles(" + fileDir + ")...\n\n")
 
     val listDirFiles = fileDir.listFiles
+    if (listDirFiles == null) return Array.empty[File]
 
     listDirFiles ++ listDirFiles.filter(_.isDirectory).flatMap(recursiveListFiles)
   }
@@ -167,6 +261,19 @@ object Main extends App {
   }
 
 
+  // Change these to any MP3 metadata values
+  val artist = "rem"
+  val title = "man on the moon"
+
+  println("\n\nFetching album cover...\n\n")
+  
+  fetchCover(artist, title)
+
+  println("\n\n...fetching album cover.\n\n")
+
+  exit;
+
+  
   println("\n\nMP3 tagging...\n\n")
 
 

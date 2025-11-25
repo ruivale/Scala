@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="softwaremill.sttp.client3 3.11.0">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/lib/async-http-client-backend-zio_3-3.11.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/core_3-3.11.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/circe_3-3.11.0.jar!/" />
+      <root url="jar://$PROJECT_DIR$/lib/zio_3-3.11.0.jar!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

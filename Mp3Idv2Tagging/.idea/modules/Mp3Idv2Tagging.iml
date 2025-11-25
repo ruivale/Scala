@@ -12,6 +12,5 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="Mp3Idv2Tagging.main" />
     <orderEntry type="module" module-name="Mp3Idv2Tagging.test" production-on-test="" />
-    <orderEntry type="library" name="mp3agic-0.9.1" level="project" />
   </component>
 </module>
