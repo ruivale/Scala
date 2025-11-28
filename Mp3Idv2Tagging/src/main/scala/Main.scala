@@ -1,48 +1,86 @@
 
 import java.io.File
-import com.mpatric.mp3agic.Mp3File
-import com.mpatric.mp3agic.ID3v1
-import com.mpatric.mp3agic.ID3v1Tag
-import com.mpatric.mp3agic.ID3v2
-import com.mpatric.mp3agic.ID3v22Tag
 import sttp.client3.*
 import scala.util.control.NonFatal
-import java.nio.file.{Files, Paths}
-import scala.sys.exit
+import java.nio.file.{Files, Paths, StandardCopyOption}
 import ujson._
 import java.awt.image.BufferedImage
 import java.awt.{Graphics2D, RenderingHints}
 import javax.imageio.ImageIO
 import java.io.ByteArrayOutputStream
 import scala.collection.immutable.Seq
+import org.jaudiotagger.audio.AudioFileIO
+import org.jaudiotagger.tag.FieldKey
+import org.jaudiotagger.tag.images.Artwork
+import org.jaudiotagger.tag.images.ArtworkFactory
 
 
 /**
- * mp3agic:
- * https://github.com/mpatric/mp3agic
+ * Scala program to download album covers from MusicBrainz and embed them into MP3 files.
+ * All file names must be in the format: "Artist - Album - Title.mp3" (the '-' is the separator)
  *
- * Getting ID3v2 album artwork:
- * Mp3File mp3file = new Mp3File("SomeMp3File.mp3");
+ * This program does the following:
+ *    - replaces some chars/substrings in the file names from a defined dir (the MP3 source dir);
+ *    - searches for a release-group MBID using the album name and artist name;
+ *    - fetches all releases for the release-group, filters for official releases, and sorts them by date;
+ *    - downloads the front cover image for the most recent release;
+ *    - resizes the image to a fixed defined size (typical 500x500 pixels);
+ *    - embeds the resized image into the MP3 file's ID3 tag;
+ *    - saves the modified MP3 file with the embedded cover image;
  *
- * if (mp3file.hasId3v2Tag()) {
- * ID3v2 id3v2Tag = mp3file.getId3v2Tag();
- * byte[] imageData = id3v2Tag.getAlbumImage();
+ * Requirements:
+ *    - MusicBrainz access (musicbrainz.org);
+ *    - CoverArtArchive access (coverartarchive.org);
  *
- * if (imageData != null) {
- * String mimeType = id3v2Tag.getAlbumImageMimeType();
- * // Write image to file - can determine appropriate file extension from the mime type
- * RandomAccessFile file = new RandomAccessFile("album-artwork", "rw");
- * file.write(imageData);
- * file.close();
- * }
- * }
  *
+ * Using:
+ *    - com.softwaremill.sttp.client3:
+ *        . sttp client is an open-source library which provides a clean, programmer-friendly API to describe HTTP
+ *          requests and how to handle responses.
+ *
+ *    - org.jaudiotagger:
+ *        . provides a Java library for editing tag information in audio files.
+ *
+ *    - com.lihaoyi:
+ *        . provides all the core building blocks a typical software engineer needs day to day:
+ *            . HTTP clients and servers;
+ *            . JSON/binary data serialization;
+ *            . filesystem operations;
+ *            . CLI argument parsing;
+ *            . build tooling;
+ *            . etc.
  *
  */
 object Main extends App {
-  private val imgCoverW = 500;
-  private val imgCoverH = 500;
+
+  private val imgCoverW = 500
+  private val imgCoverH = 500
+
+  // the target dir
+  private val albumCoverTempImgName = "cover.jpg"
+
+  private val sourceDir = "C:\\Temp\\rvale\\Private\\_Music\\4tag"
+  // the target dir
+  private val targetDir = "4xinal"
+  // the original file name separator (separates Artist - Album - Title)
+  private val fileNameSeparator = "-"
+  // the value to replace in the original file dir
+  private val dirToReplace = "4tag"
+  // the string to replace ALL occurrences from LIST in the original file name
+  private val fileNameReplace = ""
+  // list of chars/strings to replace in the original file name
+  private val listRexExp = List(
+    " - YouTube ", " - YouTube", "- YouTube ", "- YouTube",
+    " -YouTube ", "-YouTube ", " -YouTube", "-YouTube",
+    "YouTube", " YouTube", "YouTube ", " YouTube ", "YouTub",
+    //" - You ", " - You", "- You", "- You",
+    " (Official Video) ", " (Official Video)", "(Official Video) ", "(Official Video)",
+    "[OFFICIAL VIDEO]",
+    "(official music video)")
+
   private val backend = HttpURLConnectionBackend()
+
+
 
   // ---------------------------------------------------------
   // 1. Search for release-group MBID using album name + artist
@@ -50,6 +88,7 @@ object Main extends App {
   private def searchReleaseGroupMBID(artist: String, album: String): Option[String] = {
     val query = s"artist:$artist AND releasegroup:$album"
     val url = uri"https://musicbrainz.org/ws/2/release-group/?query=$query&fmt=json&limit=1"
+
     println(s"Search URL: $url")
 
     val response = basicRequest.get(url).send(backend)
@@ -57,9 +96,11 @@ object Main extends App {
     response.body.toOption.flatMap { json =>
       val parsed: ujson.Value = ujson.read(json)
       val groups = parsed("release-groups").arr
+
       groups.headOption.map(g => g("id").str)
     }
   }
+
 
   // ---------------------------------------------------------
   // 2. Fetch all releases for a release-group, filter official, sort by date
@@ -81,20 +122,25 @@ object Main extends App {
     }.getOrElse(Seq.empty[(String, String)])
   }
 
+
   // ---------------------------------------------------------
   // 3. Try each release until we find a cover
   // ---------------------------------------------------------
   private def downloadFirstAvailableCover(releases: Seq[(String, String)], filename: String = "cover.jpg"): Boolean = {
     for ((mbid, date) <- releases) {
       println(s"Trying release MBID: $mbid (Date: $date)")
+
       val url = uri"https://coverartarchive.org/release/$mbid/front"
       val response = basicRequest.get(url).response(asByteArray).send(backend)
 
       response.body match {
         case Right(bytes) =>
           Files.write(Paths.get(filename), bytes)
+
           println(s"Saved cover from release $mbid to $filename")
+
           return true
+
         case Left(_) =>
           println(s"WARNING: no cover art for release $mbid")
       }
@@ -102,10 +148,11 @@ object Main extends App {
     false
   }
 
+
   // ---------------------------------------------------------
   // 4. High-level helper: artist + album -> cover.jpg
   // ---------------------------------------------------------
-  private def fetchAlbumCover(artist: String, album: String): Unit = {
+  private def fetchAlbumCover(artist: String, album: String, fileName: String): Unit = {
     try {
       println(s"Searching release-group for: $artist - $album")
 
@@ -129,7 +176,7 @@ object Main extends App {
 
       println(s"Found ${releases.size} releases")
 
-      if !downloadFirstAvailableCover(releases, artist + "-" + album + ".jpg") then
+      if !downloadFirstAvailableCover(releases, fileName) then
         println("\tWARNING: no cover art found for any release")
 
     } catch {
@@ -138,12 +185,8 @@ object Main extends App {
   }
 
 
-
-
-
   //
   // From the given directory, recursively obtain and return ALL files.
-  //
   private def recursiveListFiles(fileDir: File): Array[File] = {
     println("recursiveListFiles(" + fileDir + ")...")
 
@@ -154,27 +197,8 @@ object Main extends App {
   }
 
 
-  /** *
-   * //
-   * // Will try to replace ALL listRexExp strings found in the file name by the str2Replace.
-   * //
-   * def renameFile(file: File, listRexExp: List[String], str2Replace: String) = {
-   * var newAbsFileName = file.getAbsolutePath
-   *
-   * listRexExp.filter(s => newAbsFileName.indexOf(s) > -1).foreach( s => {
-   * newAbsFileName = newAbsFileName.replace(s, "")
-   * })
-   *
-   * println("\t\tRename file name: " + newAbsFileName+".")
-   *
-   * file.renameTo(new File(newAbsFileName))
-   * }
-   */
-
-
   //
   // Will try to replace ALL listRexExp strings found in the file name by the str2Replace.
-  //
   private def getFileNewName(file: File, listRexExp: List[String], str2Replace: String): String = {
     var newAbsFileName = file.getAbsolutePath
 
@@ -187,37 +211,49 @@ object Main extends App {
     return newAbsFileName
   }
 
+
   //
   // Will try to obtain the ID3v2 MP3 album cover from the title, album and artist info.
   // It searches for album covers from a list of URLs.
-  //
-  private def setMp3AlbumCover(id3v2Tag: ID3v2): Unit = {
-    if (id3v2Tag != null) {
-      val title = id3v2Tag.getTitle
-      val album = id3v2Tag.getAlbum
-      val artist = id3v2Tag.getArtist
+  private def setMp3AlbumCover(file: File, artist: String, album: String, title: String): Unit = {
+    println(s"Fetching album cover for artist($artist) album($album) title($title)...")
 
-      println(s"Fetching album cover for artist($artist) album($album) title($title)...")
-      fetchAlbumCover(artist, album)
+    var coverFileName = albumCoverTempImgName
 
-      //val coverFile = new File("cover.jpg")
-      val coverFile = new File(artist + "-" + album + ".jpg")
+    if(albumCoverTempImgName.isEmpty) {
+      coverFileName = artist + "-" + album + ".jpg"
+    }
 
-      if (coverFile.exists) {
-        println(s"Setting ID3v2Tag album image...")
-        try {
-          val resizedImageBytes = resizeImage(coverFile, imgCoverW, imgCoverH)
-          id3v2Tag.setAlbumImage(resizedImageBytes, "image/jpeg")
-        } catch {
-          case e: Exception => println(s"Failed to resize/set album cover: ${e.getMessage}")
-        }
-      } else {
-        println("\tWARNING: no cover found.")
+    fetchAlbumCover(artist, album, coverFileName)
+
+    val coverFile = new File(coverFileName)
+
+    if (coverFile.exists) {
+      println(s"Setting ID3v2Tag album image...")
+
+      try {
+        val audioFile = AudioFileIO.read(file)
+        val tag = audioFile.getTagOrCreateAndSetDefault
+
+        tag.setField(FieldKey.ARTIST, artist)
+        tag.setField(FieldKey.ALBUM, album)
+        tag.setField(FieldKey.TITLE, title)
+
+        val artwork: Artwork = ArtworkFactory.createArtworkFromFile(coverFile)
+        tag.addField(artwork)
+
+        audioFile.commit()
+
+        println("Album cover set successfully!")
+
+      } catch {
+        case e: Exception => println(s"Failed to set album cover: ${e.getMessage}")
       }
     } else {
-      println("\tWARNING: no ID3v2Tag found.")
+      println("\tWARNING: no cover found.")
     }
   }
+
 
   // Resize image to specified dimensions
   private def resizeImage(imageFile: File, width: Int, height: Int): Array[Byte] = {
@@ -237,10 +273,10 @@ object Main extends App {
     baos.toByteArray
   }
 
+
   //
   // For the given file, tries to extrapolate its song name, artist from the file's name.
   // For instance, Pink Floyd - Echoes.mp3 will be artist="Pink Floyd" and song="Echoes".
-  //
   private def addMp3Tags(
                           file: File,
                           strSeparator: String,
@@ -251,31 +287,15 @@ object Main extends App {
 
     println("");
 
-
     val fileNew = new File(getFileNewName(file, listRexExp, str2Replace).replace(strDirToReplace, strDirNew))
 
     if (fileNew.exists) {
       println("\tWARNING: file " + fileNew + " already exists. Continue anyway...")
     }
 
-    fileNew.getParentFile.mkdirs;
-    fileNew.createNewFile
-
-    val mp3file = new Mp3File(file)
-    var id3v1Tag: ID3v1 = null
-
-    if (mp3file.hasId3v1Tag) {
-      id3v1Tag = mp3file.getId3v1Tag
-
-    } else {
-      // mp3 does not have an ID3v1 tag, let's create one..
-      id3v1Tag = new ID3v1Tag()
-      mp3file.setId3v1Tag(id3v1Tag)
-    }
 
     // something like: artist - album - title.mp3
     var strFileName = fileNew.getName
-    id3v1Tag.setComment(strFileName)
 
     val artistAlbumSeparatorIdx = strFileName.indexOf(strSeparator);
     val strArtist = strFileName.substring(0, artistAlbumSeparatorIdx - 1)
@@ -290,106 +310,37 @@ object Main extends App {
     val strTitle = strFileName.substring(0, strFileName.indexOf("."))
 
 
-
-    id3v1Tag.setArtist(strArtist)
-    id3v1Tag.setAlbum(strAlbum)
-    id3v1Tag.setTitle(strTitle)
-    //    id3v1Tag.setTrack("5")
-    //    id3v1Tag.setYear("2001")
-    //    id3v1Tag.setGenre(12)
-
-
-    // ID v2
-    var id3v2Tag: ID3v2 = null
-
-    if (mp3file.hasId3v2Tag) {
-      println("Detected IDv2 (artist: \"" +
-        strArtist + "\" album: \"" +
-        strAlbum + "\" title: \"" +
-        strTitle + "\").")
-      id3v2Tag = mp3file.getId3v2Tag
-
-    } else {
-      println("WARNING: no IDv2 (artist: \"" +
-        strArtist + "\" album: \"" +
-        strAlbum + "\" title: \"" +
-        strTitle + "\"). Setting a IDv2Tag...")
-      // mp3 does not have an ID3v1 tag, let's create one..
-      id3v2Tag = new ID3v22Tag()
-      mp3file.setId3v2Tag(id3v2Tag)
+    fileNew.getParentFile.mkdirs
+    
+    // Copy original file to new location if different
+    if (!fileNew.equals(file)) {
+      Files.copy(file.toPath, fileNew.toPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING)
     }
 
-    id3v2Tag.setArtist(strArtist)
-    id3v2Tag.setAlbum(strAlbum)
-    id3v2Tag.setTitle(strTitle)
+    // Set album cover using JAudioTagger
+    setMp3AlbumCover(fileNew, strArtist, strAlbum, strTitle)
 
-
-    if (id3v2Tag != null) {
-      //      println("\t\t\tDetected (artist: \"" +
-      //        strArtist + "\" album: \"" +
-      //        strAlbum + "\" title: \"" +
-      //        strTitle + "\").")
-
-      setMp3AlbumCover(id3v2Tag)
-
-    } else {
-      println("\t\tERROR: no image was set cause IDv2 is null. (artist: \"" +
-        strArtist + "\" album: \"" +
-        strAlbum + "\" title: \"" +
-        strTitle + "\").")
-    }
-
-
-    mp3file.save(fileNew.getAbsolutePath);
-
-
-    //
-    //	  println("\tLength of this mp3 is: " + mp3file.getLengthInSeconds + " seconds")
-    //    println("\tBitrate: " + mp3file.getBitrate + " kbps Vbr? " + mp3file.isVbr)
-    //    println("\tSample rate: " + mp3file.getSampleRate + " Hz")
-    //    println("\tHas ID3v1 tag?: " + mp3file.hasId3v1Tag)
-    //    println("\tHas ID3v2 tag?: " + mp3file.hasId3v2Tag)
-    //    println("\tHas custom tag?: " + mp3file.hasCustomTag)
   }
-
-
-  //  // Change these to any MP3 metadata values
-  //  val artist = "rem"
-  //  val album = "out of time"
-  //  //val title = "low"
-  //
-  //  println("Fetching album cover...")
-  //
-  //  fetchAlbumCover(artist, album)
-  //
-  //  println("...fetching album cover.")
-  //
-  //  exit;
 
 
   println("\n\n\nMP3 tagging...\n\n")
 
 
   // obtain all files from the given dir
-  private val listFiles = recursiveListFiles(new File("C:\\Temp\\rvale\\Private\\_Music\\4tag"))
+  private val listFiles = recursiveListFiles(new File(sourceDir))
 
   listFiles.filter(_.isFile).foreach {
     addMp3Tags(
-      _,
-      "-",
-      List(
-        " - YouTube ", " - YouTube", "- YouTube ", "- YouTube",
-        " -YouTube ", "-YouTube ", " -YouTube", "-YouTube",
-        "YouTube", " YouTube", "YouTube ", " YouTube ", "YouTub",
-        //" - You ", " - You", "- You", "- You",
-        " (Official Video) ", " (Official Video)", "(Official Video) ", "(Official Video)",
-        "[OFFICIAL VIDEO]",
-        "(official music video)"),
-      "",
-      "4tag",
-      "4xinal");
+      _,                  // the file itself
+      fileNameSeparator,  // ... ;-)
+      listRexExp,         // list of strings to be replaced, by fileNameReplace, in the original file name
+      fileNameReplace,    // string to replace in file name
+      dirToReplace,       // 4tag
+      targetDir           // 4xinal
+    );
   }
 
   println("\n\n...MP3 tagging.")
 
 }
+

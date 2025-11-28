@@ -12,5 +12,6 @@
     <orderEntry type="sourceFolder" forTests="false" />
     <orderEntry type="module" module-name="Mp3Idv2Tagging.main" />
     <orderEntry type="module" module-name="Mp3Idv2Tagging.test" production-on-test="" />
+    <orderEntry type="library" name="jaudiotagger-3.0.1" level="project" />
   </component>
 </module>

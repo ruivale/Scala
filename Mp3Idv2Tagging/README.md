@@ -148,17 +148,3 @@ https://coverartarchive.org/release/{RELEASE_MBID}/front
 
 
 This returns a JPEG/PNG image.
-
-?? Would you like a version that uses a real JSON library (circe, uPickle, zio-json)?
-
-The above uses simple regex extraction for compactness - if you prefer:
-
-Circe
-
-uPickle
-
-ZIO-JSON
-
-Play JSON
-
-.I can rewrite it with proper types and decoders.
