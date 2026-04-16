@@ -2,7 +2,7 @@
 import java.io.File
 import sttp.client3.*
 import scala.util.control.NonFatal
-import java.nio.file.{Files, Paths, StandardCopyOption}
+import java.nio.file.{Files, Paths}
 import ujson._
 import java.awt.image.BufferedImage
 import java.awt.{Graphics2D, RenderingHints}
@@ -83,9 +83,11 @@ object Main extends App {
 
 
   // ---------------------------------------------------------
-  // 1. Search for release-group MBID using album name + artist
+  // Search for release-group MBID using album name + artist
   // ---------------------------------------------------------
   private def searchReleaseGroupMBID(artist: String, album: String): Option[String] = {
+    // For instance, for artist="U2" and album="War", the search URL is:
+    //    https://musicbrainz.org/ws/2/release-group/?query=artist:U2 AND releasegroup:War&fmt=json&limit=1"
     val query = s"artist:$artist AND releasegroup:$album"
     val url = uri"https://musicbrainz.org/ws/2/release-group/?query=$query&fmt=json&limit=1"
 
@@ -218,39 +220,39 @@ object Main extends App {
   private def setMp3AlbumCover(file: File, artist: String, album: String, title: String): Unit = {
     println(s"Fetching album cover for artist($artist) album($album) title($title)...")
 
-    var coverFileName = albumCoverTempImgName
-
-    if(albumCoverTempImgName.isEmpty) {
-      coverFileName = artist + "-" + album + ".jpg"
-    }
+    var coverFileName = artist + "-" + album + ".jpg"
 
     fetchAlbumCover(artist, album, coverFileName)
 
     val coverFile = new File(coverFileName)
 
-    if (coverFile.exists) {
-      println(s"Setting ID3v2Tag album image...")
+    println(s"Setting ID3v2Tag album image...")
 
-      try {
-        val audioFile = AudioFileIO.read(file)
-        val tag = audioFile.getTagOrCreateAndSetDefault
+    try {
+      val audioFile = AudioFileIO.read(file)
+      val tag = audioFile.getTagOrCreateAndSetDefault
 
-        tag.setField(FieldKey.ARTIST, artist)
-        tag.setField(FieldKey.ALBUM, album)
-        tag.setField(FieldKey.TITLE, title)
+      tag.setField(FieldKey.ARTIST, artist)
+      tag.setField(FieldKey.ALBUM, album)
+      tag.setField(FieldKey.TITLE, title)
 
+      if (coverFile.exists) {
         val artwork: Artwork = ArtworkFactory.createArtworkFromFile(coverFile)
         tag.addField(artwork)
-
-        audioFile.commit()
-
-        println("Album cover set successfully!")
-
-      } catch {
-        case e: Exception => println(s"Failed to set album cover: ${e.getMessage}")
+      } else {
+        println("\tWARNING: no cover found.")
       }
-    } else {
-      println("\tWARNING: no cover found.")
+
+      audioFile.commit()
+
+      if (coverFile.exists) {
+        coverFile.delete();
+      }
+
+      println("Album cover set successfully!")
+
+    } catch {
+      case e: Exception => println(s"Failed to set album cover: ${e.getMessage}")
     }
   }
 
@@ -275,8 +277,8 @@ object Main extends App {
 
 
   //
-  // For the given file, tries to extrapolate its song name, artist from the file's name.
-  // For instance, Pink Floyd - Echoes.mp3 will be artist="Pink Floyd" and song="Echoes".
+  // For the given file, tries to extrapolate its song name, album and artist from the file's name.
+  // For instance, Pink Floyd - Meddle - Echoes.mp3 will be artist="Pink Floyd", album="Meddle" and song="Echoes".
   private def addMp3Tags(
                           file: File,
                           strSeparator: String,
