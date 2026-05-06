@@ -80,6 +80,8 @@ object Main extends App {
 
   private val backend = HttpURLConnectionBackend()
 
+  private val listFilesWithNoCover = List()
+
 
 
   // ---------------------------------------------------------
@@ -226,7 +228,7 @@ object Main extends App {
 
     val coverFile = new File(coverFileName)
 
-    println(s"Setting ID3v2Tag album image...")
+    println(s"Setting ID3v2Tag...")
 
     try {
       val audioFile = AudioFileIO.read(file)
@@ -239,7 +241,10 @@ object Main extends App {
       if (coverFile.exists) {
         val artwork: Artwork = ArtworkFactory.createArtworkFromFile(coverFile)
         tag.addField(artwork)
+        println("Album cover set successfully!")
+
       } else {
+        listFilesWithNoCover :+ "" + artist + " - " + album
         println("\tWARNING: no cover found.")
       }
 
@@ -248,8 +253,6 @@ object Main extends App {
       if (coverFile.exists) {
         coverFile.delete();
       }
-
-      println("Album cover set successfully!")
 
     } catch {
       case e: Exception => println(s"Failed to set album cover: ${e.getMessage}")
@@ -341,6 +344,9 @@ object Main extends App {
       targetDir           // 4xinal
     );
   }
+
+  println("\nMissing cover:")
+  listFilesWithNoCover.foreach(x => println("\t" + x))
 
   println("\n\n...MP3 tagging.")
 
