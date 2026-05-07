@@ -5,6 +5,7 @@ import scala.util.control.NonFatal
 import java.nio.file.{Files, Paths}
 import java.net.URLEncoder
 import java.util.Base64
+import java.util.regex.Pattern
 import ujson._
 import java.awt.image.BufferedImage
 import java.awt.{Graphics2D, RenderingHints}
@@ -124,6 +125,44 @@ object Main extends App {
       val groups = parsed("release-groups").arr
 
       groups.headOption.map(g => g("id").str)
+    }
+  }
+
+  // ---------------------------------------------------------
+  // Search MusicBrainz for a recording and return its album name
+  // ---------------------------------------------------------
+  private def searchAlbumByArtistAndTitle(
+      artist: String,
+      title: String
+  ): Option[String] = {
+    try {
+      val query = s"artist:\"$artist\" AND recording:\"$title\""
+      val url =
+        uri"https://musicbrainz.org/ws/2/recording/?query=$query&fmt=json&limit=1&inc=releases"
+
+      println(
+        s"Searching MusicBrainz recording for: artist='$artist' title='$title'"
+      )
+      val response = basicRequest.get(url).send(backend)
+
+      response.body.toOption.flatMap { json =>
+        val parsed = ujson.read(json)
+        parsed.obj.get("recordings").flatMap { recordings =>
+          recordings.arr.headOption.flatMap { recording =>
+            recording.obj.get("releases").flatMap { releases =>
+              releases.arr.headOption.flatMap { release =>
+                release.obj.get("title").map(_.str)
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      case NonFatal(e) =>
+        println(
+          s"\tWARNING: MusicBrainz recording search failed: ${e.getMessage}"
+        )
+        None
     }
   }
 
@@ -689,6 +728,21 @@ object Main extends App {
     }
   }
 
+  // Sanitize filename: replace illegal characters for Windows filesystems
+  private def sanitizeFilename(name: String): String = {
+    name
+      .replace("<", "")
+      .replace(">", "")
+      .replace(":", "-")
+      .replace("\"", "")
+      .replace("/", "-")
+      .replace("\\", "-")
+      .replace("|", "-")
+      .replace("?", "")
+      .replace("*", "")
+      .trim
+  }
+
   // Resize image to specified dimensions
   private def resizeImage(
       imageFile: File,
@@ -746,36 +800,66 @@ object Main extends App {
       )
     }
 
-    // something like: artist - album - title.mp3
-    var strFileName = fileNew.getName
+    def splitName(value: String): List[String] =
+      value.split(Pattern.quote(strSeparator), -1).map(_.trim).toList
 
-    val artistAlbumSeparatorIdx = strFileName.indexOf(strSeparator);
-    val strArtist = strFileName.substring(0, artistAlbumSeparatorIdx)
-    // something like: album - title.mp3
-    strFileName =
-      strFileName.substring(artistAlbumSeparatorIdx + strSeparator.length);
+    def renameWithAlbum(
+        artist: String,
+        album: String,
+        title: String
+    ): File = {
+      val sanitizedAlbum = sanitizeFilename(album)
+      val newName =
+        s"$artist$strSeparator$sanitizedAlbum$strSeparator$title.mp3"
+      new File(fileNew.getParentFile, newName)
+    }
 
-    val albumTitleSeparatorIdx = strFileName.indexOf(strSeparator);
-    val strAlbum = strFileName.substring(0, albumTitleSeparatorIdx)
+    val nameWithoutExtension =
+      if (fileNew.getName.toLowerCase.endsWith(".mp3"))
+        fileNew.getName.dropRight(4)
+      else fileNew.getName
 
-    // something like: title.mp3
-    strFileName =
-      strFileName.substring(albumTitleSeparatorIdx + strSeparator.length);
-    val strTitle = strFileName.substring(0, strFileName.indexOf("."))
+    val parts = splitName(nameWithoutExtension)
 
-    fileNew.getParentFile.mkdirs
+    val (targetFile, strArtist, strAlbum, strTitle) = parts match {
+      case artist :: album :: titleParts if titleParts.nonEmpty =>
+        val title = titleParts.mkString(strSeparator)
+        (fileNew, artist, album, title)
 
-    // Copy original file to new location if different
-    if (!fileNew.equals(file)) {
+      case artist :: title :: Nil =>
+        searchAlbumByArtistAndTitle(artist, title) match {
+          case Some(album) =>
+            val sanitizedAlbum = sanitizeFilename(album)
+            val renamed = renameWithAlbum(artist, sanitizedAlbum, title)
+            println(s"Renaming missing-album file to: ${renamed.getName}")
+            (renamed, artist, sanitizedAlbum, title)
+          case None =>
+            println(
+              s"\tWARNING: album not found for '$artist - $title'." +
+                " File will keep the original name."
+            )
+            (fileNew, artist, "", title)
+        }
+
+      case _ =>
+        println(
+          s"\tWARNING: unable to parse MP3 file name '${fileNew.getName}'. " +
+            "Expected 'Artist - Album - Title.mp3' or 'Artist - Title.mp3'."
+        )
+        return
+    }
+
+    targetFile.getParentFile.mkdirs
+
+    if (!targetFile.equals(file)) {
       Files.copy(
         file.toPath,
-        fileNew.toPath,
+        targetFile.toPath,
         java.nio.file.StandardCopyOption.REPLACE_EXISTING
       )
     }
 
-    // Set album cover using JAudioTagger
-    setMp3AlbumCover(fileNew, strArtist, strAlbum, strTitle)
+    setMp3AlbumCover(targetFile, strArtist, strAlbum, strTitle)
 
   }
 
