@@ -80,7 +80,7 @@ object Main extends App {
 
   private val backend = HttpURLConnectionBackend()
 
-  private val listFilesWithNoCover = List()
+  private var listFilesWithNoCover = List[String]()
 
 
 
@@ -111,16 +111,37 @@ object Main extends App {
   // ---------------------------------------------------------
   private def lookupReleasesForGroup(groupMBID: String): Seq[(String, String)] = {
     val url = uri"https://musicbrainz.org/ws/2/release-group/$groupMBID?inc=releases&fmt=json"
-    val response = basicRequest.get(url).send(backend)
+    println(s"Search for releases for group URL: $url")
+
+    val getBasicReq = basicRequest.get(url)
+    println(s"GetBasicRequest: ${getBasicReq}")
+
+    val response = getBasicReq.send(backend)
+    println(s"Response: ${response}")
 
     response.body.toOption.map { json =>
       val parsed: ujson.Value = ujson.read(json)
       val releases = parsed("releases").arr
 
       releases
-        .filter(r => r.obj.get("status").exists(_.str == "Official"))
-        .sortBy(r => r.obj.get("date").map(_.str).getOrElse("9999-99-99"))
-        .map(r => (r("id").str, r.obj.get("date").map(_.str).getOrElse("Unknown")))
+        .filter(r => r.obj.get("status") match {
+          case Some(ujson.Str(value)) => value == "Official"
+          case _ => false
+        })
+        .sortBy(r => r.obj.get("date") match {
+          case Some(ujson.Str(value)) => value
+          case _ => "0000-00-00"
+        }).reverse  // Try most recent releases first
+        .flatMap { r =>
+          r.obj.get("id") match {
+            case Some(ujson.Str(id)) =>
+              Some((id, r.obj.get("date") match {
+                case Some(ujson.Str(value)) => value
+                case _ => "Unknown"
+              }))
+            case _ => None
+          }
+        }
         .toList
       //.toSeq
     }.getOrElse(Seq.empty[(String, String)])
@@ -132,21 +153,20 @@ object Main extends App {
   // ---------------------------------------------------------
   private def downloadFirstAvailableCover(releases: Seq[(String, String)], filename: String = "cover.jpg"): Boolean = {
     for ((mbid, date) <- releases) {
-      println(s"Trying release MBID: $mbid (Date: $date)")
-
       val url = uri"https://coverartarchive.org/release/$mbid/front"
+      println(s"Trying release MBID: $mbid (Date: $date) url: $url")
+
       val response = basicRequest.get(url).response(asByteArray).send(backend)
+      println(s"Response: ${response}")
 
       response.body match {
         case Right(bytes) =>
           Files.write(Paths.get(filename), bytes)
-
           println(s"Saved cover from release $mbid to $filename")
-
           return true
 
         case Left(_) =>
-          println(s"WARNING: no cover art for release $mbid")
+          println(s"\tWARNING: no cover art for release $mbid")
       }
     }
     false
@@ -244,7 +264,7 @@ object Main extends App {
         println("Album cover set successfully!")
 
       } else {
-        listFilesWithNoCover :+ "" + artist + " - " + album
+        listFilesWithNoCover = listFilesWithNoCover :+ (artist + " - " + album)
         println("\tWARNING: no cover found.")
       }
 
@@ -290,7 +310,7 @@ object Main extends App {
                           strDirToReplace: String,
                           strDirNew: String): Unit = {
 
-    println("");
+    println("\n");
 
     val fileNew = new File(getFileNewName(file, listRexExp, str2Replace).replace(strDirToReplace, strDirNew))
 

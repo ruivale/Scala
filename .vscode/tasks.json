@@ -1,0 +1,20 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "sbt compile",
+			"command": "sbt",
+			"args": [
+				"compile"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/Mp3Idv2Tagging"
+			},
+			"problemMatcher": [],
+			"presentation": {
+				"reveal": "silent"
+			}
+		}
+	]
+}
