@@ -1,3 +1,28 @@
+error id: file:///C:/D/Projects/GIT/_GitHub/Private/ruivale/Scala/Mp3Idv2Tagging/src/main/scala/Main.scala:org/jaudiotagger/tag/images/ArtworkFactory#createArtworkFromFile().
+file:///C:/D/Projects/GIT/_GitHub/Private/ruivale/Scala/Mp3Idv2Tagging/src/main/scala/Main.scala
+empty definition using pc, found symbol in pc: org/jaudiotagger/tag/images/ArtworkFactory#createArtworkFromFile().
+empty definition using semanticdb
+empty definition using fallback
+non-local guesses:
+	 -sttp/client3/ArtworkFactory.createArtworkFromFile.
+	 -sttp/client3/ArtworkFactory.createArtworkFromFile#
+	 -sttp/client3/ArtworkFactory.createArtworkFromFile().
+	 -ujson/ArtworkFactory.createArtworkFromFile.
+	 -ujson/ArtworkFactory.createArtworkFromFile#
+	 -ujson/ArtworkFactory.createArtworkFromFile().
+	 -org/jaudiotagger/tag/images/ArtworkFactory.createArtworkFromFile.
+	 -org/jaudiotagger/tag/images/ArtworkFactory.createArtworkFromFile#
+	 -org/jaudiotagger/tag/images/ArtworkFactory.createArtworkFromFile().
+	 -ArtworkFactory.createArtworkFromFile.
+	 -ArtworkFactory.createArtworkFromFile#
+	 -ArtworkFactory.createArtworkFromFile().
+	 -scala/Predef.ArtworkFactory.createArtworkFromFile.
+	 -scala/Predef.ArtworkFactory.createArtworkFromFile#
+	 -scala/Predef.ArtworkFactory.createArtworkFromFile().
+offset: 30674
+uri: file:///C:/D/Projects/GIT/_GitHub/Private/ruivale/Scala/Mp3Idv2Tagging/src/main/scala/Main.scala
+text:
+```scala
 import java.io.File
 import sttp.client3.*
 import sttp.model.Uri
@@ -870,7 +895,7 @@ object Main extends App {
       }
 
       if (!hasExistingCover && coverFile.exists) {
-        val artwork: Artwork = ArtworkFactory.createArtworkFromFile(coverFile)
+        val artwork: Artwork = ArtworkFactory.createArtwor@@kFromFile(coverFile)
         tag.addField(artwork)
         println("Album cover set successfully!")
 
@@ -1062,3 +1087,10 @@ object Main extends App {
   println("\n\n...MP3 tagging.")
 
 }
+
+```
+
+
+#### Short summary: 
+
+empty definition using pc, found symbol in pc: org/jaudiotagger/tag/images/ArtworkFactory#createArtworkFromFile().
