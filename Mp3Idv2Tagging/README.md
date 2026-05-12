@@ -1,7 +1,6 @@
 TODO:
-  - if a MP3 already has a cover image, don't try to set one;
-  - try to obtain the musik genre;
-  - 
+  - try to create M3U files for each dir, and its subdirs, listing all mp3 files in these dirs;
+  - try to create M3U files for all genres;
 
 
 ----------------------------------------------------------------------------------

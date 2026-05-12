@@ -24,13 +24,46 @@ import org.jaudiotagger.tag.images.ArtworkFactory
   * This program does the following:
   *   - replaces some chars/substrings in the file names from a defined dir (the
   *     MP3 source dir);
-  *   - searches for a release-group MBID using the album name and artist name;
+  *   - takes "artist + song" or "artist + title + song";
+  *   - queries multiple search APIs to obtain the recording MBID using the
+  *     album name and artist name;
   *   - fetches all releases for the release-group, filters for official
   *     releases, and sorts them by date;
   *   - downloads the front cover image for the most recent release;
   *   - resizes the image to a fixed defined size (typical 500x500 pixels);
   *   - embeds the resized image into the MP3 file's ID3 tag;
-  *   - saves the modified MP3 file with the embedded cover image;
+  *   - updates the MP3 file's ID3 tag with the artist, album and title info;
+  *   - updates the MP3 file's ID3 tag with the genre info obtained from
+  *     multiple sources (MusicBrainz, Spotify, Last.fm, Discogs);
+  *   - if no cover is found for the release-group, it tries to search and
+  *     download the cover from iTunes, Discogs, Last.fm, Spotify and Deezer as
+  *     fallbacks;
+  *   - if no cover is found from any source, it logs the file name for later
+  *     manual review;
+  *   - if the MP3 file already has a cover image, it skips the download and
+  *     embedding steps, but still updates the artist, album, title and genre
+  *     info in the ID3 tag;
+  *   - if the cover image is downloaded successfully, it deletes the temporary
+  *     cover image file after embedding it into the MP3 file;
+  *   - if any error occurs during the process, it logs the error and continues
+  *     with the next file without crashing the program;
+  *   - processes all MP3 files in the given source directory and its
+  *     subdirectories recursively;
+  *   - saves the modified MP3 files with the embedded cover images into a
+  *     target directory, preserving the original directory structure relative
+  *     to the source directory.
+  *   - if the target directory doesn't exist, it creates it before saving the
+  *     modified MP3 files.
+  *   - if the target MP3 file already exists, it overwrites it with the
+  *     modified version.
+  *   - if any error occurs during the saving process, it logs the error and
+  *     continues with the next file without crashing the program.
+  *   - after processing all files, it prints a summary of the results,
+  *     including the number of files processed, the number of covers
+  *     successfully embedded, and the list of files that had no cover found.
+  *   - if any files had no cover found, it saves the list of those files into a
+  *     text file in the target directory for later manual review.
+  *     - saves the modified MP3 file with the embedded cover image;
   *
   * Requirements:
   *   - MusicBrainz access (musicbrainz.org);
@@ -63,10 +96,12 @@ object Main extends App {
   private val imgCoverW = 500
   private val imgCoverH = 500
 
-  // the target dir
+  // Temporary name for the downloaded cover image before embedding it into the MP3 file.
   private val albumCoverTempImgName = "cover.jpg"
 
+  // the base dir where the MP3 files are located (and which will be processed)
   private val musikDir = "C:\\Temp\\rvale\\Private\\_Music\\"
+  // the source dir where the MP3 files are located (and which will be processed)
   private val sourceDir = musikDir + "4tag"
   // the target dir
   private val targetDir = musikDir + "4xinal"
