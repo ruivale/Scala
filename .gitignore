@@ -1,4 +1,8 @@
 # Ficheiros e pastas gerados pelo sbt
+.bloop/*
+.metals/*
+.idea/*
+.bsp/*
 target/
 project/target/
 project/project/
