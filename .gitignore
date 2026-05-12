@@ -43,3 +43,42 @@ out/
 
 # Ficheiros de testes
 test-output/
+
+
+# === Build tools ===
+target/
+project/target/
+project/project/
+
+# === Bloop ===
+.bloop/
+
+# === Metals / VS Code ===
+.metals/
+.vscode/
+.vscode-*
+
+# === BSP (Build Server Protocol) ===
+.bsp/
+
+# === Coursier / Ivy caches ===
+.coursier/
+.ivy2/
+.cache/
+
+# === Mill ===
+.out/
+
+# === Scala CLI ===
+.scala-build/
+
+# === Logs ===
+*.log
+
+# === OS-specific ===
+.DS_Store
+Thumbs.db
+
+# === IntelliJ IDEA ===
+.idea/
+*.iml
